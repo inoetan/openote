@@ -1,0 +1,1218 @@
+openapi: 3.1.0
+info:
+  title: Openote API
+  description: Rundeck-like visual job scheduler REST API
+  version: 1.0.0
+  contact:
+    name: Openote
+servers:
+  - url: /api/v1
+    description: API v1
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        message:
+          type: string
+        code:
+          type: string
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        email:
+          type: string
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    Project:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        createdBy:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    NodeType:
+      type: string
+      enum: [shell_script, shell_command, http_request]
+
+    NodeDefinition:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        type:
+          $ref: '#/components/schemas/NodeType'
+        description:
+          type: string
+        config:
+          type: object
+          description: |
+            Type-specific config:
+            - shell_script: {interpreter, script_content, env_vars, timeout_secs, working_dir}
+            - shell_command: {command, env_vars, timeout_secs, working_dir}
+            - http_request: {url, method, headers, body, timeout_secs}
+        createdBy:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    WorkflowNode:
+      type: object
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+        position:
+          type: object
+          properties:
+            x:
+              type: number
+            y:
+              type: number
+        data:
+          type: object
+          description: Node data including nodeDefId, label, config overrides
+
+    WorkflowEdge:
+      type: object
+      properties:
+        id:
+          type: string
+        source:
+          type: string
+        target:
+          type: string
+        type:
+          type: string
+        label:
+          type: string
+          description: "success or failure - controls conditional flow"
+
+    WorkflowSpec:
+      type: object
+      properties:
+        nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowNode'
+        edges:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkflowEdge'
+        viewport:
+          type: object
+
+    OnFailure:
+      type: string
+      enum: [stop, continue, retry]
+
+    Job:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        isActive:
+          type: boolean
+        timeoutSecs:
+          type: integer
+          default: 3600
+        maxConcurrent:
+          type: integer
+          default: 1
+        onFailure:
+          $ref: '#/components/schemas/OnFailure'
+        retryCount:
+          type: integer
+          default: 0
+        workflowSpec:
+          $ref: '#/components/schemas/WorkflowSpec'
+        createdBy:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    Schedule:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        jobId:
+          type: string
+          format: uuid
+        cronExpr:
+          type: string
+          example: "0 9 * * 1-5"
+        timezone:
+          type: string
+          example: "Asia/Tokyo"
+        isEnabled:
+          type: boolean
+        nextRunAt:
+          type: string
+          format: date-time
+          nullable: true
+        lastRunAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    ExecutionStatus:
+      type: string
+      enum: [queued, running, success, failed, aborted, timed_out]
+
+    TriggerType:
+      type: string
+      enum: [schedule, manual, webhook, api]
+
+    Execution:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        jobId:
+          type: string
+          format: uuid
+        projectId:
+          type: string
+          format: uuid
+        triggeredBy:
+          $ref: '#/components/schemas/TriggerType'
+        triggeredUser:
+          type: string
+          format: uuid
+          nullable: true
+        status:
+          $ref: '#/components/schemas/ExecutionStatus'
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        finishedAt:
+          type: string
+          format: date-time
+          nullable: true
+        durationMs:
+          type: integer
+          nullable: true
+        workerId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    StepExecution:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        executionId:
+          type: string
+          format: uuid
+        jobStepId:
+          type: string
+          format: uuid
+        stepOrder:
+          type: integer
+        status:
+          $ref: '#/components/schemas/ExecutionStatus'
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        finishedAt:
+          type: string
+          format: date-time
+          nullable: true
+        exitCode:
+          type: integer
+          nullable: true
+
+    LogChunk:
+      type: object
+      properties:
+        seq:
+          type: integer
+        stream:
+          type: string
+          enum: [stdout, stderr, system]
+        content:
+          type: string
+        ts:
+          type: string
+          format: date-time
+
+    NotificationChannel:
+      type: string
+      enum: [email, slack_webhook, generic_webhook]
+
+    NotificationEvent:
+      type: string
+      enum: [on_success, on_failure, on_start, on_timeout]
+
+    NotificationRule:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        jobId:
+          type: string
+          format: uuid
+        event:
+          $ref: '#/components/schemas/NotificationEvent'
+        channel:
+          $ref: '#/components/schemas/NotificationChannel'
+        config:
+          type: object
+          description: "{recipients, url, headers, template}"
+
+    AuditEvent:
+      type: object
+      properties:
+        id:
+          type: integer
+        projectId:
+          type: string
+          format: uuid
+          nullable: true
+        userId:
+          type: string
+          format: uuid
+          nullable: true
+        action:
+          type: string
+          example: "job.created"
+        resourceType:
+          type: string
+        resourceId:
+          type: string
+          format: uuid
+          nullable: true
+        oldValue:
+          type: object
+          nullable: true
+        newValue:
+          type: object
+          nullable: true
+        occurredAt:
+          type: string
+          format: date-time
+
+    PaginatedResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: {}
+        total:
+          type: integer
+        page:
+          type: integer
+        pageSize:
+          type: integer
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ─── Auth ────────────────────────────────────────────────────────
+  /auth/login:
+    post:
+      tags: [auth]
+      summary: Login with username and password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+      responses:
+        '200':
+          description: JWT tokens
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken:
+                    type: string
+                  refreshToken:
+                    type: string
+                  user:
+                    $ref: '#/components/schemas/User'
+        '401':
+          description: Invalid credentials
+
+  /auth/refresh:
+    post:
+      tags: [auth]
+      summary: Refresh access token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        '200':
+          description: New access token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accessToken:
+                    type: string
+
+  /auth/logout:
+    post:
+      tags: [auth]
+      summary: Logout (invalidate refresh token)
+      responses:
+        '204':
+          description: Logged out
+
+  # ─── Users ───────────────────────────────────────────────────────
+  /users:
+    get:
+      tags: [users]
+      summary: List all users (admin only)
+      responses:
+        '200':
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+    post:
+      tags: [users]
+      summary: Create a user (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, email, password]
+              properties:
+                username:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 8
+      responses:
+        '201':
+          description: Created user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+
+  /users/{userId}:
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      tags: [users]
+      summary: Update user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+                isActive:
+                  type: boolean
+      responses:
+        '200':
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+    delete:
+      tags: [users]
+      summary: Delete user
+      responses:
+        '204':
+          description: Deleted
+
+  # ─── Projects ────────────────────────────────────────────────────
+  /projects:
+    get:
+      tags: [projects]
+      summary: List projects accessible to current user
+      responses:
+        '200':
+          description: List of projects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Project'
+    post:
+      tags: [projects]
+      summary: Create a project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+      responses:
+        '201':
+          description: Created project
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+
+  /projects/{projectId}:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [projects]
+      summary: Get project by ID
+      responses:
+        '200':
+          description: Project detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+    put:
+      tags: [projects]
+      summary: Update project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+      responses:
+        '200':
+          description: Updated project
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+    delete:
+      tags: [projects]
+      summary: Delete project
+      responses:
+        '204':
+          description: Deleted
+
+  # ─── Node Definitions ────────────────────────────────────────────
+  /projects/{projectId}/nodes:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [nodes]
+      summary: List node definitions for a project
+      responses:
+        '200':
+          description: List of node definitions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NodeDefinition'
+    post:
+      tags: [nodes]
+      summary: Create a node definition
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, type, config]
+              properties:
+                name:
+                  type: string
+                type:
+                  $ref: '#/components/schemas/NodeType'
+                description:
+                  type: string
+                config:
+                  type: object
+      responses:
+        '201':
+          description: Created node definition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeDefinition'
+
+  /projects/{projectId}/nodes/{nodeId}:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: nodeId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [nodes]
+      summary: Get node definition by ID
+      responses:
+        '200':
+          description: Node definition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeDefinition'
+    put:
+      tags: [nodes]
+      summary: Update node definition
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                config:
+                  type: object
+      responses:
+        '200':
+          description: Updated node definition
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeDefinition'
+    delete:
+      tags: [nodes]
+      summary: Delete node definition
+      responses:
+        '204':
+          description: Deleted
+
+  # ─── Jobs ────────────────────────────────────────────────────────
+  /projects/{projectId}/jobs:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [jobs]
+      summary: List jobs for a project
+      responses:
+        '200':
+          description: List of jobs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Job'
+    post:
+      tags: [jobs]
+      summary: Create a job
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, workflowSpec]
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                timeoutSecs:
+                  type: integer
+                maxConcurrent:
+                  type: integer
+                onFailure:
+                  $ref: '#/components/schemas/OnFailure'
+                retryCount:
+                  type: integer
+                workflowSpec:
+                  $ref: '#/components/schemas/WorkflowSpec'
+      responses:
+        '201':
+          description: Created job
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+
+  /projects/{projectId}/jobs/{jobId}:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: jobId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [jobs]
+      summary: Get job by ID
+      responses:
+        '200':
+          description: Job detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+    put:
+      tags: [jobs]
+      summary: Update job
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                isActive:
+                  type: boolean
+                timeoutSecs:
+                  type: integer
+                maxConcurrent:
+                  type: integer
+                onFailure:
+                  $ref: '#/components/schemas/OnFailure'
+                retryCount:
+                  type: integer
+                workflowSpec:
+                  $ref: '#/components/schemas/WorkflowSpec'
+      responses:
+        '200':
+          description: Updated job
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+    delete:
+      tags: [jobs]
+      summary: Delete job
+      responses:
+        '204':
+          description: Deleted
+
+  /projects/{projectId}/jobs/{jobId}/execute:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: jobId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [executions]
+      summary: Manually trigger job execution
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                inputVars:
+                  type: object
+                  description: Optional variable overrides for this run
+      responses:
+        '202':
+          description: Execution created and queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Execution'
+
+  # ─── Schedules ───────────────────────────────────────────────────
+  /projects/{projectId}/jobs/{jobId}/schedule:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: jobId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [schedules]
+      summary: Get schedule for a job
+      responses:
+        '200':
+          description: Schedule
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Schedule'
+        '404':
+          description: No schedule configured
+    put:
+      tags: [schedules]
+      summary: Create or update schedule for a job
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cronExpr]
+              properties:
+                cronExpr:
+                  type: string
+                  example: "0 9 * * 1-5"
+                timezone:
+                  type: string
+                  example: "Asia/Tokyo"
+                isEnabled:
+                  type: boolean
+      responses:
+        '200':
+          description: Updated schedule
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Schedule'
+    delete:
+      tags: [schedules]
+      summary: Delete schedule (disable scheduling)
+      responses:
+        '204':
+          description: Deleted
+
+  # ─── Executions ──────────────────────────────────────────────────
+  /projects/{projectId}/executions:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: page
+        in: query
+        schema:
+          type: integer
+          default: 1
+      - name: pageSize
+        in: query
+        schema:
+          type: integer
+          default: 20
+      - name: status
+        in: query
+        schema:
+          $ref: '#/components/schemas/ExecutionStatus'
+      - name: jobId
+        in: query
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [executions]
+      summary: List executions for a project
+      responses:
+        '200':
+          description: Paginated execution list
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Execution'
+
+  /projects/{projectId}/executions/{executionId}:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: executionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [executions]
+      summary: Get execution detail with step executions
+      responses:
+        '200':
+          description: Execution detail
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/Execution'
+                  - type: object
+                    properties:
+                      steps:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/StepExecution'
+
+  /projects/{projectId}/executions/{executionId}/abort:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: executionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      tags: [executions]
+      summary: Abort a running execution
+      responses:
+        '200':
+          description: Abort signal sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Execution'
+
+  /executions/{executionId}/logs/stream:
+    parameters:
+      - name: executionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: fromSeq
+        in: query
+        schema:
+          type: integer
+          default: 0
+        description: Start from this sequence number (for reconnection)
+    get:
+      tags: [executions]
+      summary: Stream execution logs via WebSocket
+      description: |
+        Upgrades to WebSocket. Each message is a JSON LogChunk.
+        On initial connect, sends all existing logs from fromSeq.
+        Then streams new logs in real-time as they arrive.
+        Closes when execution finishes.
+      responses:
+        '101':
+          description: WebSocket upgrade
+
+  /executions/{executionId}/logs:
+    parameters:
+      - name: executionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: fromSeq
+        in: query
+        schema:
+          type: integer
+          default: 0
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          default: 1000
+    get:
+      tags: [executions]
+      summary: Get execution logs (REST, for reconnection)
+      responses:
+        '200':
+          description: Log chunks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LogChunk'
+
+  # ─── Notifications ───────────────────────────────────────────────
+  /projects/{projectId}/jobs/{jobId}/notifications:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: jobId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [notifications]
+      summary: List notification rules for a job
+      responses:
+        '200':
+          description: Notification rules
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/NotificationRule'
+    post:
+      tags: [notifications]
+      summary: Create notification rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [event, channel, config]
+              properties:
+                event:
+                  $ref: '#/components/schemas/NotificationEvent'
+                channel:
+                  $ref: '#/components/schemas/NotificationChannel'
+                config:
+                  type: object
+      responses:
+        '201':
+          description: Created notification rule
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationRule'
+
+  /projects/{projectId}/jobs/{jobId}/notifications/{ruleId}:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: jobId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: ruleId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    delete:
+      tags: [notifications]
+      summary: Delete notification rule
+      responses:
+        '204':
+          description: Deleted
+
+  # ─── Audit ───────────────────────────────────────────────────────
+  /projects/{projectId}/audit:
+    parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: page
+        in: query
+        schema:
+          type: integer
+          default: 1
+      - name: pageSize
+        in: query
+        schema:
+          type: integer
+          default: 50
+    get:
+      tags: [audit]
+      summary: Get audit log for a project
+      responses:
+        '200':
+          description: Paginated audit events
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedResponse'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/AuditEvent'
+
+  # ─── Health ──────────────────────────────────────────────────────
+  /healthz:
+    get:
+      tags: [system]
+      summary: Health check
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  db:
+                    type: string
+                    example: ok
+                  redis:
+                    type: string
+                    example: ok

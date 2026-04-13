@@ -1,0 +1,60 @@
+name: API CI
+
+on:
+  push:
+    paths:
+      - "api/**"
+  pull_request:
+    paths:
+      - "api/**"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: openote_test
+          POSTGRES_USER: openote
+          POSTGRES_PASSWORD: openote
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - "6379:6379"
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Download dependencies
+        run: cd api && go mod download
+
+      - name: Vet
+        run: cd api && go vet ./...
+
+      - name: Test
+        env:
+          DB_DSN: postgres://openote:openote@localhost:5432/openote_test?sslmode=disable
+          REDIS_URL: redis://localhost:6379
+        run: cd api && go test -race -coverprofile=coverage.out ./...
+
+      - name: Build
+        run: cd api && go build ./cmd/server

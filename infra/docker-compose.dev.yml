@@ -1,0 +1,34 @@
+version: "3.9"
+
+# Development overrides — use alongside docker-compose.yml:
+#   docker compose -f infra/docker-compose.yml -f infra/docker-compose.dev.yml up
+
+services:
+  api:
+    build:
+      context: ./api
+      dockerfile: ../infra/docker/api.Dockerfile
+      target: builder
+    volumes:
+      - ./api:/app
+    command: "go run ./cmd/server"
+    ports:
+      - "8080:8080"
+
+  worker:
+    build:
+      context: ./worker
+      dockerfile: ../infra/docker/worker.Dockerfile
+      target: builder
+    volumes:
+      - ./worker:/app
+    command: "go run ./cmd/worker"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: ../infra/docker/frontend.Dockerfile
+      target: builder
+    volumes:
+      - ./frontend/src:/app/src
+    command: "npm run dev -- --host"
